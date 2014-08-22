@@ -1,22 +1,10 @@
 {
     "name": "er",
-    "version": "3.1.0-beta.5",
+    "version": "4.0.0-alpha.1",
     "contributors": [
         {
             "name": "otakustay",
             "email": "otakustay@gmail.com"
-        },
-        {
-            "name": "erik",
-            "email": "errorrik@gmail.com"
-        },
-        {
-            "name": "strwind",
-            "email": "gzzyyff@gmail.com"
-        },
-        {
-            "name": "killeryyl",
-            "email": "killeryyl@outlook.com"
         }
     ],
     "dependencies": {
@@ -32,9 +20,12 @@
         "loaderAutoConfig": "js,htm,html,tpl,vm,phtml",
         "loaderUrl": "http://s1.bdstatic.com/r/www/cache/ecom/esl/1-8-2/esl.js",
         "dependencies": {
+            "eoo": "0.x",
+            "emc": "1.x",
+            "promise": "1.x",
             "mini-event": "1.x",
-            "etpl": ">=2.0.8",
-            "eoo": "0.x"
+            "etpl": "2.x",
+            "underscore": "1.6.x"
         }
     }
 }
