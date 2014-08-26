@@ -6,6 +6,12 @@
  */
 define(
     function (require) {
+        var STATE = {
+            STARTED: 'started',
+            STOPPED: 'stopped',
+            PAUSED: 'paused'
+        };
+
         /**
          * 地址监听抽象类
          *
@@ -18,8 +24,9 @@ define(
          * - {@link Locator#.updateLocation|updateLocation方法}将用户通过编程跳转提供的URL推送到地址栏上
          *
          * @class Locator
-         * @abstract
          * @extends mini-event.EventTarget
+         *
+         * @alias Locator.prototype
          */
         var exports = {};
 
@@ -44,36 +51,160 @@ define(
         //
         // 以上2种入口最终逻辑都集中在`redirect`方法，区别在于是否有`background: true`这个配置项
 
+        /**
+         * 构造函数
+         *
+         * @constructs Locator
+         */
         exports.constructor = function () {
             /**
-             * 标记当前对象是否正在运行
+             * 标记当前对象状态
              *
-             * @member {boolean} Locator#.isWorking
+             * 状态迁移如下：
+             *
+             * - 停止状态：仅可以启动
+             * - 启动状态：可以暂停，可以停止
+             * - 暂停状态：可以启动但相当于恢复，可以恢复，可以停止
+             *
+             * @member {string} Locator#.state
+             *
              * @private
              */
-            this.isWorking = false;
+            this.state = STATE.STOPPED;
 
             /**
              * 当前地址
              *
              * @member {?string} Locator#.currentLocation
+             *
              * @private
              */
             this.currentLocation = null;
         };
 
         /**
-         * 获取浏览器中的当前地址，该方法需要返回被一致化后的地址，如对hash的处理需要去除头部的`#`符号
+         * 启动当前对象
+         *
+         * 未启动的对象依旧可以通过{@link Locator#.redirect|redirect方法}等的调用来控制地址跳转
+         *
+         * @method Locator#.start
+         *
+         * @fires start
+         */
+        exports.start = function () {
+            if (this.state === STATE.STARTED) {
+                return;
+            }
+
+            if (this.state === STATE.PAUSED) {
+                this.resume();
+                return;
+            }
+
+            this.registerChangeListener();
+            this.state = STATE.STARTED;
+
+            // 处理第一次地址的通知
+            var u = require('underscore');
+            setTimeout(u.bind(this.processChange, this), 0);
+
+            /**
+             * 启动时触发
+             *
+             * @event Locator#.start
+             */
+            this.fire('start');
+        };
+
+        /**
+         * 停止当前对象
+         *
+         * 仅停止对浏览器的监听，不影响{@link Locator#.redirect|redirect方法}等的调用
+         *
+         * @method Locator#.stop
+         *
+         * @fires stop
+         */
+        exports.stop = function () {
+            if (this.state === STATE.STOPPED) {
+                return;
+            }
+
+            this.state = STATE.STOPPED;
+            this.unregisterChangeListener();
+
+            /**
+             * 停止时触发
+             *
+             * @event Locator#.stop
+             */
+            this.fire('stop');
+        };
+
+        /**
+         * 使当前对象继续工作
+         *
+         * @method Locator#.resume
+         *
+         * @fires resume
+         */
+        exports.resume = function () {
+            if (this.state === STATE.STARTED || this.state === STATE.STOPPED) {
+                return;
+            }
+
+            this.state = STATE.STARTED;
+
+            /**
+             * 恢复时触发
+             *
+             * @event Locator#.resume
+             */
+            this.fire('resume');
+        };
+
+        /**
+         * 暂停当前对象的工作
+         *
+         * 仅暂停对浏览器的监听，不影响{@link Locator#.redirect|redirect方法}等的调用
+         *
+         * @method Locator#.pause
+         *
+         * @fires pause
+         */
+        exports.pause = function () {
+            if (this.state === STATE.PAUSED || this.state === STATE.STOPPED) {
+                return;
+            }
+
+            this.state = STATE.PAUSED;
+
+            /**
+             * 暂停时触发
+             *
+             * @event Locator#.pause
+             */
+            this.fire('pause');
+        };
+
+        /**
+         * 获取浏览器中的当前地址，即`#`后面的部分
          *
          * 需要注意该方法必须返回浏览器中可见的地址（通常在地址栏中体现），而不是返回当前对象内部存储的地址
+         *
+         * 被重写时，该方法需要返回被一致化后的地址，如hash则需要去除起始的`#`字符
          *
          * @method Locator#.getVisibleLocation
          *
          * @return {string} 浏览器中可见的当前地址
-         * @abstract
          */
         exports.getVisibleLocation = function () {
-            throw new Error('getVisibleLocation method is not implemented');
+            // Firefox下`location.hash`存在自动解码的情况，比如hash的值是**abc%3def**，在Firefox下获取会成为**abc=def**，
+            // 为了避免这一情况，需要从`location.href`中分解
+            var index = location.href.indexOf('#');
+            var url = index === -1 ? '' : location.href.slice(index + 1);
+
+            return url;
         };
 
         /**
@@ -82,10 +213,35 @@ define(
          * @method Locator#.registerChangeListener
          *
          * @protected
-         * @abstract
          */
         exports.registerChangeListener = function () {
-            throw new Error('registerChangeListener method is not implemented');
+            var u = require('underscore');
+            /**
+             * 用于临时保存`hashchange`事件的处理函数以便注销事件
+             *
+             * @member {?Function} Locator#.hashChangeListener
+             *
+             * @private
+             */
+            var listener = this.hashChangeListener = u.bind(this.processChange, this);
+            // 如果有hashchange事件则使用事件，否则定时监听
+            if (window.addEventListener) {
+                window.addEventListener('hashchange', listener, false);
+            }
+            // IE8在IE7兼容模式下，会有`onhashchange`这个属性，但实际不支持`hashchange`事件（你坑我一脸）
+            else if ('onhashchange' in window && document.documentMode > 7) {
+                window.attachEvent('onhashchange', listener);
+            }
+            else {
+                /**
+                 * 用于非标准浏览器下通过定时器模拟`hashchange`事件的定时器id
+                 *
+                 * @member {?number} Locator#.rollTimer
+                 *
+                 * @private
+                 */
+                this.rollTimer = setInterval(listener, 100);
+            }
         };
 
         /**
@@ -94,52 +250,26 @@ define(
          * @method Locator#.unregisterChangeListener
          *
          * @protected
-         * @abstract
          */
         exports.unregisterChangeListener = function () {
-            throw new Error('unregisterChangeListener method is not implemented');
-        };
+            // 没有启动过的话，就没有这个方法，也无所谓停止的概念
+            if (!this.hashChangeListener) {
+                return;
+            }
 
-        /**
-         * 启动当前对象
-         *
-         * @method Locator#.start
-         */
-        exports.start = function () {
-            this.registerChangeListener();
-            this.resume();
+            if (this.rollTimer) {
+                clearInterval(this.rollTimer);
+                this.rollTimer = null;
+            }
 
-            // 处理第一次地址的通知
-            var u = require('underscore');
-            this.startupTimer = setTimeout(u.bind(this.processChange, this), 0);
-        };
+            if (window.removeEventListener) {
+                window.removeEventListener('hashchange', this.hashChangeListener, false);
+            }
+            else if ('onhashchange' in window && document.documentMode > 7) {
+                window.detachEvent('onhashchange', this.hashChangeListener);
+            }
 
-        /**
-         * 停止当前对象
-         *
-         * @method Locator#.stop
-         */
-        exports.stop = function () {
-            this.pause();
-            this.unregisterChangeListener();
-        };
-
-        /**
-         * 使当前对象继续工作
-         *
-         * @method Locator#.resume
-         */
-        exports.resume = function () {
-            this.isWorking = true;
-        };
-
-        /**
-         * 暂停当前对象的工作
-         *
-         * @method Locator#.pause
-         */
-        exports.pause = function () {
-            this.isWorking = false;
+            this.hashChangeListener = null;
         };
 
         /**
@@ -150,7 +280,7 @@ define(
          * @protected
          */
         exports.processChange = function () {
-            if (!this.isWorking) {
+            if (this.state !== STATE.STARTED) {
                 return;
             }
 
@@ -171,7 +301,7 @@ define(
          */
         exports.isRedirectValid = function (url, options) {
             var isChanged = url !== this.currentLocation;
-            return isChanged || options.force;
+            return isChanged || !!options.force;
         };
 
         /**
@@ -181,10 +311,9 @@ define(
          *
          * @param {string} url 目标地址
          * @protected
-         * @abstract
          */
         exports.updateLocation = function (url) {
-            throw new Error('updateLocation method is not implemented');
+            location.hash = url;
         };
 
         /**
