@@ -5,6 +5,7 @@
     "source": {
         "include": [
             "src/Locator.js",
+            "src/Enum.js",
             "doc/meta",
             "README.md"
         ],
