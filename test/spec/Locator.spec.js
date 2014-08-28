@@ -1,6 +1,6 @@
 define(
     function (require) {
-        var Locator = require('Locator');
+        var Locator = require('er/Locator');
 
         describe('Locator', function () {
             it('should be a constructor', function () {
@@ -182,7 +182,7 @@ define(
                     location.hash = '';
                     locator = new Locator();
                     locator.start();
-                    var redirect = jasmine.createSpy('redirect');
+                    redirect = jasmine.createSpy('redirect');
                     locator.on('redirect', redirect);
                 });
 
@@ -196,7 +196,7 @@ define(
                     location.hash = 'x';
                     setTimeout(function () {
                         expect(redirect).toHaveBeenCalled();
-                        var eventObject = redirect.mostRecentCall.args[0];
+                        var eventObject = redirect.calls.mostRecent().args[0];
                         expect(eventObject.url).toBe('x');
                         locator.un('redirect', redirect);
                         done();
@@ -237,7 +237,7 @@ define(
                     setTimeout(function () {
                         location.hash = 'y';
                             setTimeout(function () {
-                                var eventObject = redirect.mostRecentCall.args[0];
+                                var eventObject = redirect.calls.mostRecent().args[0];
                                 expect(eventObject.url).toBe('y');
                                 expect(eventObject.referrer).toBe('x');
                                 done();
@@ -249,7 +249,7 @@ define(
                     locator.redirect('x');
                     location.hash = 'y';
                     setTimeout(function () {
-                        var eventObject = redirect.mostRecentCall.args[0];
+                        var eventObject = redirect.calls.mostRecent().args[0];
                         expect(eventObject.url).toBe('y');
                         expect(eventObject.referrer).toBe('x');
                         done();
@@ -288,7 +288,7 @@ define(
                 it('should fire redirect event if location is changed', function () {
                     locator.redirect('x');
                     expect(redirect).toHaveBeenCalled();
-                    var eventObject = redirect.mostRecentCall.args[0];
+                    var eventObject = redirect.calls.mostRecent().args[0];
                     expect(eventObject.url).toBe('x');
                 });
 
@@ -314,10 +314,14 @@ define(
                     expect(redirect).toHaveBeenCalled();
                 });
 
-                it('should not fire redirect event if location is identical', function () {
+                it('should not fire redirect event if location is identical', function (done) {
                     setTimeout(function () {
+                        // 因为`start`必定触发一次事件，这里弄个新的事件处理函数
+                        var redirect = jasmine.createSpy('redirect');
+                        locator.on('redirect', redirect);
                         locator.redirect('');
                         expect(redirect).not.toHaveBeenCalled();
+                        done();
                     }, 0);
                 });
 
@@ -334,7 +338,7 @@ define(
                 it('should log previous redirect call as referrer', function () {
                     locator.redirect('x');
                     locator.redirect('y');
-                    var eventObject = redirect.mostRecentCall.args[0];
+                    var eventObject = redirect.calls.mostRecent().args[0];
                     expect(eventObject.url).toBe('y');
                     expect(eventObject.referrer).toBe('x');
                 });
@@ -343,7 +347,7 @@ define(
                     location.hash = 'x';
                     setTimeout(function () {
                         locator.redirect('y');
-                        var eventObject = redirect.mostRecentCall.args[0];
+                        var eventObject = redirect.calls.mostRecent().args[0];
                         expect(eventObject.url).toBe('y');
                         expect(eventObject.referrer).toBe('x');
                         done();
@@ -360,7 +364,7 @@ define(
                     locator.on('redirect', redirect);
                     locator.reload();
                     expect(redirect).toHaveBeenCalled();
-                    var eventObject = redirect.mostRecentCall.args[0];
+                    var eventObject = redirect.calls.mostRecent().args[0];
                     expect(eventObject.url).toBe('x');
                 });
 

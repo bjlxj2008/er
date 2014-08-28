@@ -1,13 +1,13 @@
 define(
     function (require) {
-        var Enum = require('Enum');
+        var Enum = require('er/Enum');
 
         describe('Enum', function () {
             it('should be a constructor', function () {
                 expect(typeof Enum).toBe('function');
             });
 
-            expect('constructor', function () {
+            describe('constructor', function () {
                 it('should accept no arguments', function () {
                     expect(function () { new Enum(); }).not.toThrow();
                 });
